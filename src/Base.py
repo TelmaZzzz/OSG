@@ -4,7 +4,7 @@ from utils import utils
 import logging
 # from torch._C import dtype
 # from transformers.utils.dummy_pt_objects import BartForCausalLM, BartModel
-from transformers import AutoTokenizer, BartForConditionalGeneration, BertTokenizer
+from transformers import AutoTokenizer, BartForConditionalGeneration, BertTokenizer, T5Tokenizer, T5ForConditionalGeneration
 from modeling_cpt import CPTForConditionalGeneration
 from train import *
 import json
@@ -124,10 +124,13 @@ def prepare_examples(path):
 
 
 def main(args):
+    logging.getLogger().setLevel(logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logging.info("Config Init")
+    utils.set_seed(959794+args.local_rank)
     torch.cuda.set_device(args.local_rank)
-    dist.init_process_group(backend='nccl')
-    args.device = torch.device("cuda", args.local_rank)
+    if args.local_rank != -1:
+        dist.init_process_group(backend='nccl')
+    args.device = torch.device("cuda", args.local_rank if args.local_rank != -1 else 0)
     logging.info("Load Data")
     train_data = prepare_examples(args.train_path)
     valid_data = prepare_examples(args.valid_path)
@@ -142,12 +145,14 @@ def main(args):
     utils.debug("tokenizer", args.tokenizer_path)
     utils.debug("pretrain", args.pretrain_path)
     tokenizer = BertTokenizer.from_pretrained(args.tokenizer_path)
+    # tokenizer = T5Tokenizer.from_pretrained(args.tokenizer_path)
     # tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path)
     # tokenizer = BartTokenizer.from_file(args.tokenizre_path)
     if args.model_load:
         model = torch.load(args.model_load)
     else:
         model = BartForConditionalGeneration.from_pretrained(args.pretrain_path)
+        # model = T5ForConditionalGeneration.from_pretrained(args.pretrain_path)
     # utils.debug("model", model)
     # model = CPTForConditionalGeneration.from_pretrained(args.pretrain_path)
     # special_token = {"additional_special_tokens": ["[titile]"] + ["EOS"] + ["BOS"] + [f"<w{i}>" for i in range(8)]}
@@ -182,14 +187,19 @@ def main(args):
     logging.info("Prepare Dataset")
     train_dataset = BaseDataset(train_data, tokenizer)
     valid_dataset = BaseDataset(valid_data, tokenizer)
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-    valid_sampler = utils.SequentialDistributedSampler(valid_dataset, args.batch_size)
-    args.valid_len = len(valid_dataset)
-    # test_dataset = BaseDataset(test_data, tokenizer)
-    train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-    train_iter = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler, collate_fn=Collection(args))
-    valid_iter = torch.utils.data.DataLoader(valid_dataset, batch_size=args.batch_size, sampler=valid_sampler, collate_fn=Collection(args))
+    if args.local_rank == -1:
+        train_iter = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=Collection(args))
+        valid_iter = torch.utils.data.DataLoader(valid_dataset, batch_size=args.batch_size, collate_fn=Collection(args))
+    else:
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        valid_sampler = utils.SequentialDistributedSampler(valid_dataset, args.batch_size)
+        args.valid_len = len(valid_dataset)
+        # test_dataset = BaseDataset(test_data, tokenizer)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        train_iter = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler, collate_fn=Collection(args))
+        valid_iter = torch.utils.data.DataLoader(valid_dataset, batch_size=args.batch_size, sampler=valid_sampler, collate_fn=Collection(args))
     # test_iter = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, collate_fn=Collection(args))
+    args.parameter = utils.get_train_parameter()
     logging.info("Start Training")
     Base_train(train_iter, valid_iter, model, tokenizer, args)
 
@@ -224,7 +234,7 @@ def predict(args):
     tokenizer.add_special_tokens(special_token)
     word_token = ["“", "”"]
     tokenizer.add_tokens(word_token)
-    tokenizer.pad_token = "[PAD]"
+    # tokenizer.pad_token = "[PAD]"
     tokenizer.eos_token = "[SEP]"
     tokenizer.bos_token = "[CLS]"
     args.pad_id = tokenizer.pad_token_id
@@ -248,7 +258,6 @@ def predict(args):
 
 if __name__ == "__main__":
     args = Base_config()
-    utils.set_seed(959794)
     if args.train:
         args.model_save = '/'.join([args.model_save, utils.d2s(datetime.datetime.now(), time=True)])
         main(args)

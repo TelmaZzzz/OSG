@@ -245,11 +245,18 @@ def Base_predict(test_iter, model, tokenizer, args):
 def Base_valid(valid_iter, model, tokenizer, args):
     model.eval()
     predict_logits = []
+    parameter = args.parameter
     for item in valid_iter:
         if args.n_gpu > 1:
-            logit = model.module.generate(item["input_ids"].cuda(), top_p=0.9, min_length=200, max_length=512)
+            logit = model.module.generate(item["input_ids"].to(args.device), max_length=parameter["max_length"], \
+                min_length=parameter["min_length"], do_sample=parameter["do_sample"], early_stopping=parameter["early_stopping"], \
+                num_beams=parameter["num_beams"], temperature=parameter["temperature"], top_k=parameter["top_k"], top_p=parameter["top_p"], \
+                length_penalty=parameter["length_penalty"], no_repeat_ngram_size=parameter["no_repeat_ngram_size"])
         else:
-            logit = model.generate(item["input_ids"].cuda(), top_p=0.9, min_length=200, max_length=512)
+            logit = model.module.generate(item["input_ids"].to(args.device), max_length=parameter["max_length"], \
+                min_length=parameter["min_length"], do_sample=parameter["do_sample"], early_stopping=parameter["early_stopping"], \
+                num_beams=parameter["num_beams"], temperature=parameter["temperature"], top_k=parameter["top_k"], top_p=parameter["top_p"], \
+                length_penalty=parameter["length_penalty"])
         # logit = model(input_ids=item["input_ids"].cuda(), attention_mask=item["attention_mask"].cuda()).logits
         # logit = torch.max(F.softmax(logit, dim=-1), dim=-1)[1].cpu()
         # utils.debug("logit shape", logit.shape)
@@ -259,35 +266,40 @@ def Base_valid(valid_iter, model, tokenizer, args):
         # predict = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False).replace(" ","").replace("[unused1]", "") for g in logit]
         # utils.debug("predict", predict[0])
         # predicts.extend(predict)
-    predictions = utils.distributed_concat(torch.cat(predict_logits, dim=0), args.valid_len)
+    if args.local_rank != -1:
+        predictions = utils.distributed_concat(torch.cat(predict_logits, dim=0), args.valid_len)
+    else:
+        predictions = torch.cat(predict_logits, dim=0)
     predicts = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False).replace(" ","").replace("[unused1]", "") for g in predictions]
     if dist.get_rank() != 0:
-        return
-    logging.info("Metrics Compare")
-    res = metrics.base_compare(args.gold, predicts, args.outline)
-    overall = metrics.overall_compare(res)
-    res["overall"] = overall
-    for k, v in res.items():
-        logging.info("{}: {:.4f}".format(k, v))
-    save(model, args.model_save, args.step)
-    with open(args.model_save + f"_epoch{args.step}.txt", "w", encoding="utf-8") as f:
-        for i in range(len(predicts)):
-            f.write(predicts[i].strip()+"\n")
-    with open(args.model_save + f"_epoch{args.step}.jsonl", "w", encoding="utf-8") as f:
-        for i in range(len(predicts)):
-            mp = {
-                "outline": args.outline[i],
-                "gold": args.gold[i],
-                "predicts": predicts[i]
-            }
-            draw(f, mp)
-            # f.write("outline: " + utils.list2str(args.outline[i]) + "\n")
-            # f.write("gold:\n")
-            # f.write(args.gold[i]+"\n")
-            # f.write("predict:\n")
-            # f.write(predicts[i]+"\n")
-            # f.write("-----------------------------------------------\n")
-        draw(f, res)
+        dist.barrier()
+    else:
+        logging.info("Metrics Compare")
+        res = metrics.base_compare(args.gold, predicts, args.outline)
+        overall = metrics.overall_compare(res)
+        res["overall"] = overall
+        for k, v in res.items():
+            logging.info("{}: {:.4f}".format(k, v))
+        save(model, args.model_save, args.step)
+        with open(args.model_save + f"_epoch{args.step}.txt", "w", encoding="utf-8") as f:
+            for i in range(len(predicts)):
+                f.write(predicts[i].strip()+"\n")
+        with open(args.model_save + f"_epoch{args.step}.jsonl", "w", encoding="utf-8") as f:
+            for i in range(len(predicts)):
+                mp = {
+                    "outline": args.outline[i],
+                    "gold": args.gold[i],
+                    "predicts": predicts[i]
+                }
+                draw(f, mp)
+                # f.write("outline: " + utils.list2str(args.outline[i]) + "\n")
+                # f.write("gold:\n")
+                # f.write(args.gold[i]+"\n")
+                # f.write("predict:\n")
+                # f.write(predicts[i]+"\n")
+                # f.write("-----------------------------------------------\n")
+            draw(f, res)
+        dist.barrier()
 
 
 def Base_train(train_iter, valid_iter, model, tokenizer, args):
@@ -325,11 +337,12 @@ def Base_train(train_iter, valid_iter, model, tokenizer, args):
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=len(train_iter) // args.opt_step, num_training_steps=len(train_iter) * args.epoch // args.opt_step)
     mean_loss = 0
     for step in range(args.epoch):
-        train_iter.sampler.set_epoch(step)
+        if args.local_rank != -1:
+            train_iter.sampler.set_epoch(step)
         model.train()
         logging.info("Starting Training epoch:{}".format(step+1))
         for idx, item in enumerate(train_iter):
-            loss = model(input_ids=item["input_ids"].cuda(), attention_mask=item["input_mask"].cuda(), labels=item["output_ids"].cuda()).loss
+            loss = model(input_ids=item["input_ids"].to(args.device), attention_mask=item["input_mask"].to(args.device), labels=item["output_ids"].to(args.device)).loss
             if args.n_gpu > 1:
                 loss = torch.mean(loss)
             loss.backward()
@@ -505,24 +518,26 @@ def OrderBase_valid(valid_iter, model, tokenizer, args):
     predictions = utils.distributed_concat(torch.cat(predict_logits, dim=0), args.valid_len)
     predicts = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False).replace(" ","").replace("[unused1]", "") for g in predictions]
     if dist.get_rank() != 0:
-        return
-    logging.info("Metrics Compare")
-    res = metrics.base_compare(args.gold, predicts, args.outline)
-    overall = metrics.overall_compare(res)
-    res["overall"] = overall
-    for k, v in res.items():
-        logging.info("{}: {:.4f}".format(k, v))
-    save(model, args.model_save, args.step)
-    with open(args.model_save + f"_epoch{args.step}.txt", "w", encoding="utf-8") as f:
-        for i in range(len(predicts)):
-            f.write("outline: " + utils.list2str(args.outline[i]) + "\n")
-            f.write("gold:\n")
-            f.write(args.gold[i]+"\n")
-            f.write("predict:\n")
-            f.write(predicts[i]+"\n")
-            f.write("-----------------------------------------------\n")
+        dist.barrier()
+    else:
+        logging.info("Metrics Compare")
+        res = metrics.base_compare(args.gold, predicts, args.outline)
+        overall = metrics.overall_compare(res)
+        res["overall"] = overall
         for k, v in res.items():
-            f.write("{} : {:.4f}\n".format(k, v))
+            logging.info("{}: {:.4f}".format(k, v))
+        save(model, args.model_save, args.step)
+        with open(args.model_save + f"_epoch{args.step}.txt", "w", encoding="utf-8") as f:
+            for i in range(len(predicts)):
+                f.write("outline: " + utils.list2str(args.outline[i]) + "\n")
+                f.write("gold:\n")
+                f.write(args.gold[i]+"\n")
+                f.write("predict:\n")
+                f.write(predicts[i]+"\n")
+                f.write("-----------------------------------------------\n")
+            for k, v in res.items():
+                f.write("{} : {:.4f}\n".format(k, v))
+        dist.barrier()
 
 
 def OrderBase_train(train_iter, valid_iter, model, tokenizer, args):
