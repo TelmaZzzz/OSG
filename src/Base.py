@@ -209,7 +209,7 @@ def predict(args):
     dist.init_process_group(backend='nccl')
     args.device = torch.device("cuda", args.local_rank)
     logging.info("Load Data")
-    test_data = prepare_examples(args.test_path)
+    test_data = prepare_examples(args.test_path, is_train=False)
     args.gold = []
     args.outline = []
     for item in test_data:

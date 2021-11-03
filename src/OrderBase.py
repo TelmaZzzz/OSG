@@ -75,7 +75,7 @@ class BaseDataset(torch.utils.data.Dataset):
                 input_ids += word_ids
             input_ids += self._convert("[SEP]")
             input_mask = [1] * len(input_ids)
-            decoder_cut = False
+            decoder_cut = True
             if decoder_cut:
                 sentences = utils.sentence_cut(item.story)
                 output_ids = self._convert("[CLS]")
@@ -215,6 +215,7 @@ def main(args):
     torch.cuda.set_device(args.local_rank)
     dist.init_process_group(backend='nccl')
     args.device = torch.device("cuda", args.local_rank)
+    keyword = False
     # args.device = torch.device("cpu")
     logging.info("Load Data")
     train_data = prepare_examples(args.train_path, True)
@@ -230,7 +231,10 @@ def main(args):
     utils.debug("tokenizer", args.tokenizer_path)
     utils.debug("pretrain", args.pretrain_path)
     tokenizer = BertTokenizer.from_pretrained(args.tokenizer_path)
-    model = OrderBartForConditionalGeneration.from_pretrained(args.pretrain_path)
+    if keyword:
+        model = BartForConditionalGeneration.from_pretrained(args.pretrain_path)
+    else:
+        model = OrderBartForConditionalGeneration.from_pretrained(args.pretrain_path)
     utils.debug("model", model)
     special_token = {"additional_special_tokens": ["[titile]"] + ["[eos]"] + ["[bos]"] + ["[word]"] + ["<s>", "</s>"]}
     word_token = [f"<w{i}>" for i in range(8)]
@@ -268,7 +272,10 @@ def main(args):
     valid_iter = torch.utils.data.DataLoader(valid_dataset, batch_size=args.batch_size, sampler=valid_sampler,collate_fn=Collection(args))
     # test_iter = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, collate_fn=Collection(args))
     logging.info("Start Training")
-    OrderBase_train(train_iter, valid_iter, model, tokenizer, args)
+    if keyword:
+        Base_train(train_iter, valid_iter, model, tokenizer, args)
+    else:
+        OrderBase_train(train_iter, valid_iter, model, tokenizer, args)
     
 
 def predict(args):

@@ -164,13 +164,13 @@ def build_data(args):
     train_examples = build_order(train_data)
     valid_data = read_json(args.valid_path)
     valid_examples = build_order(valid_data)
-    # test_data = read_json(args.test_path)
-    # test_examples = build_order(test_data)
+    test_data = read_json(args.test_path)
+    test_examples = build_order(test_data)
     logging.info(f"train_len:{len(train_examples)}")
     logging.info(f"valid_len:{len(valid_examples)}")
     write_json(train_examples, args.train_save)
     write_json(valid_examples, args.valid_save)
-    # write_json(test_examples, args.test_save)
+    write_json(test_examples, args.test_save)
 
 
 def example_data(data, args):
