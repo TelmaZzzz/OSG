@@ -126,6 +126,7 @@ def OrderBase_config():
     parser.add_argument("--test_path", type=str)
     parser.add_argument("--model_save", type=str)
     parser.add_argument("--local_rank", type=int, default=-1)
+    parser.add_argument("--model_load", type=str)
     # Prepare data config
     parser.add_argument("--build_data", action="store_true")
     parser.add_argument("--train_save", type=str)
@@ -142,6 +143,10 @@ def OrderBase_config():
     parser.add_argument("--pretrain_path", type=str)
     parser.add_argument("--opt_step", type=int, default=1)
     parser.add_argument("--encoder_loss_p", type=float, default=1.0)
+    # Predict config
+    parser.add_argument("--predict", action="store_true")
+    parser.add_argument("--output", type=str)
+    parser.add_argument("--ans_list", type=str)
 
     args = parser.parse_args()
     

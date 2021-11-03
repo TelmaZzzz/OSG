@@ -229,6 +229,20 @@ def get_parameter():
         {
             "max_length": 512,
             "min_length": 125,
+            "do_sample": False,
+            "early_stopping": False,
+            "num_beams": 1,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "name": "GreedyModeBaseParameter"
+        },
+        {
+            "max_length": 512,
+            "min_length": 125,
             "do_sample": True,
             "early_stopping": False,
             "num_beams": 1,
@@ -289,15 +303,15 @@ def get_parameter():
 def get_train_parameter():
     return {
         "max_length": 512,
-            "min_length": 125,
-            "do_sample": False,
-            "early_stopping": False,
-            "num_beams": 1,
-            "temperature": 1.0,
-            "top_k": 50,
-            "top_p": 0.9,
-            "repetition_penalty": 1.0,
-            "length_penalty": 1.0,
-            "no_repeat_ngram_size": 0,
-            "name": "GreedyMode"
+        "min_length": 125,
+        "do_sample": False,
+        "early_stopping": False,
+        "num_beams": 1,
+        "temperature": 1.0,
+        "top_k": 50,
+        "top_p": 1,
+        "repetition_penalty": 1.0,
+        "length_penalty": 1.0,
+        "no_repeat_ngram_size": 0,
+        "name": "GreedyMode"
     }

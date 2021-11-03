@@ -13,7 +13,8 @@ PRETRAIN="fnlp/bart-large-chinese"
 # PRETRAIN="fnlp/cpt-large"
 
 # TRAIN_PATH="$HOME/Datasets/chinese_tonghua/chinese_tonghua_etstory_clean_2_outline_2.jsonl"
-TRAIN_PATH="$HOME/Datasets/LOT/data/train.jsonl"
+# TRAIN_PATH="$HOME/Datasets/LOT/data/train.jsonl"
+TRAIN_PATH="$HOME/Datasets/LOT_datasets_and_models/data/datasets/LOTdatasets/permute/train_permute_5.jsonl"
 
 python -m torch.distributed.launch --nproc_per_node 2 ../src/Base.py \
 --predict \

@@ -126,7 +126,6 @@ def prepare_examples(path):
 def main(args):
     logging.getLogger().setLevel(logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logging.info("Config Init")
-    utils.set_seed(959794+args.local_rank)
     torch.cuda.set_device(args.local_rank)
     if args.local_rank != -1:
         dist.init_process_group(backend='nccl')
@@ -258,6 +257,7 @@ def predict(args):
 
 if __name__ == "__main__":
     args = Base_config()
+    utils.set_seed(959794+args.local_rank)
     if args.train:
         args.model_save = '/'.join([args.model_save, utils.d2s(datetime.datetime.now(), time=True)])
         main(args)

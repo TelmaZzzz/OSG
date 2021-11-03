@@ -212,34 +212,36 @@ def Base_predict(test_iter, model, tokenizer, args):
     predicts = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False).replace(" ","").replace("[unused1]", "") for g in predictions]
     logging.info(f"predicts len: {len(predicts)}")
     if dist.get_rank() != 0:
-        return
-    logging.info("Metrics Compare")
-    res = metrics.base_compare(args.gold, predicts, args.outline)
-    overall = metrics.overall_compare(res)
-    res["overall"] = overall
-    name = parameter["name"]
-    logging.info(f"generate parameter name: {name}")
-    for k, v in res.items():
-        logging.info("{}: {:.4f}".format(k, v))
-    with open(args.output + f"_{name}.txt", "w", encoding="utf-8") as f:
-        for i in range(len(predicts)):
-            f.write(predicts[i].strip()+"\n")
-    with open(args.ans_list, "a", encoding="utf-8") as f:
-        # for i in range(len(predicts)):
-        #     mp = {
-        #         "outline": args.outline[i],
-        #         "gold": args.gold[i],
-        #         "predicts": predicts[i]
-        #     }
-        #     draw(f, mp)
-            # f.write("outline: " + utils.list2str(args.outline[i]) + "\n")
-            # f.write("gold:\n")
-            # f.write(args.gold[i]+"\n")
-            # f.write("predict:\n")
-            # f.write(predicts[i]+"\n")
-            # f.write("-----------------------------------------------\n")
-        res["path"] = args.output + f"_{name}.txt"
-        draw(f, res)
+        dist.barrier()
+    else:
+        logging.info("Metrics Compare")
+        res = metrics.base_compare(args.gold, predicts, args.outline)
+        overall = metrics.overall_compare(res)
+        res["overall"] = overall
+        name = parameter["name"]
+        logging.info(f"generate parameter name: {name}")
+        for k, v in res.items():
+            logging.info("{}: {:.4f}".format(k, v))
+        with open(args.output + f"_{name}.txt", "w", encoding="utf-8") as f:
+            for i in range(len(predicts)):
+                f.write(predicts[i].strip()+"\n")
+        with open(args.ans_list, "a", encoding="utf-8") as f:
+            # for i in range(len(predicts)):
+            #     mp = {
+            #         "outline": args.outline[i],
+            #         "gold": args.gold[i],
+            #         "predicts": predicts[i]
+            #     }
+            #     draw(f, mp)
+                # f.write("outline: " + utils.list2str(args.outline[i]) + "\n")
+                # f.write("gold:\n")
+                # f.write(args.gold[i]+"\n")
+                # f.write("predict:\n")
+                # f.write(predicts[i]+"\n")
+                # f.write("-----------------------------------------------\n")
+            res["path"] = args.output + f"_{name}.txt"
+            draw(f, res)
+        dist.barrier()
 
 
 def Base_valid(valid_iter, model, tokenizer, args):

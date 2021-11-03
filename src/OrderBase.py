@@ -212,7 +212,6 @@ def prepare_examples(path, is_train=True):
 def main(args):
     logging.getLogger().setLevel(logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logging.info("Config Init")
-    utils.set_seed(959794+args.local_rank)
     torch.cuda.set_device(args.local_rank)
     dist.init_process_group(backend='nccl')
     args.device = torch.device("cuda", args.local_rank)
@@ -272,8 +271,66 @@ def main(args):
     OrderBase_train(train_iter, valid_iter, model, tokenizer, args)
     
 
+def predict(args):
+    logging.getLogger().setLevel(logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
+    logging.info("Config Init")
+    torch.cuda.set_device(args.local_rank)
+    dist.init_process_group(backend='nccl')
+    args.device = torch.device("cuda", args.local_rank)
+    logging.info("Load Data")
+    test_data = prepare_examples(args.test_path, is_train=False)
+    args.gold = []
+    args.outline = []
+    for item in test_data:
+        args.gold.append(item.un_cat_story)
+        args.outline.append(item.outline)
+    # test_data = prepare_examples(args.test_path)
+    logging.info("Init Model and Tokenizer")
+    args.n_gpu = torch.cuda.device_count()
+    utils.debug("tokenizer", args.tokenizer_path)
+    utils.debug("pretrain", args.pretrain_path)
+    tokenizer = BertTokenizer.from_pretrained(args.tokenizer_path)
+    # tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_path)
+    # tokenizer = BartTokenizer.from_file(args.tokenizre_path)
+    model = torch.load(args.model_load).to(args.device)
+    if args.local_rank != -1:
+        model = DDP(model, device_ids=[args.local_rank], output_device=args.local_rank)
+    # utils.debug("model", model)
+    # model = CPTForConditionalGeneration.from_pretrained(args.pretrain_path)
+    # special_token = {"additional_special_tokens": ["[titile]"] + ["EOS"] + ["BOS"] + [f"<w{i}>" for i in range(8)]}
+    special_token = {"additional_special_tokens": ["[titile]"] + ["[eos]"] + ["[bos]"] + ["[word]"] + ["<s>", "</s>"]}
+    word_token = [f"<w{i}>" for i in range(8)]
+    special_token["additional_special_tokens"].extend(word_token)
+    vocab_token = ["“", "”"]
+    tokenizer.add_tokens(vocab_token)
+    tokenizer.add_special_tokens(special_token)
+    tokenizer.pad_token = "[PAD]"
+    tokenizer.eos_token = "[SEP]"
+    tokenizer.bos_token = "[CLS]"
+    args.pad_id = tokenizer.pad_token_id
+    test_dataset = BaseDataset(test_data, tokenizer, False)
+    args.test_len = len(test_dataset)
+    test_sampler = utils.SequentialDistributedSampler(test_dataset, args.batch_size)
+    test_iter = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, sampler=test_sampler, collate_fn=Collection(args))
+    logging.info("Start predict")
+    parameter_list = utils.get_parameter()
+    predict_list = [0]
+    args.output += f"_batch{args.batch_size}"
+    with torch.no_grad():
+        for idx, parameter in enumerate(parameter_list):
+            if idx in predict_list:
+                args.parameter = parameter
+                args.step = idx
+                Base_predict(test_iter, model, tokenizer, args)
+    logging.info("END")
+
+
 if __name__ == "__main__":
     args = OrderBase_config()
+    utils.set_seed(959794+args.local_rank)
     if args.train:
         args.model_save = '/'.join([args.model_save, utils.d2s(datetime.datetime.now(), time=True)])
         main(args)
+    if args.predict:
+        args.output = '/'.join([args.output, utils.d2s(datetime.datetime.now(), time=True)])
+        predict(args)
