@@ -358,6 +358,8 @@ def Base_train(train_iter, valid_iter, model, tokenizer, args):
         logging.info("Train loss:{:.4f}".format(mean_loss))
         mean_loss = 0
         # if dist.get_rank() == 0:
+        if step < 5:
+            continue
         with torch.no_grad():
             Base_valid(valid_iter, model, tokenizer, args)
 
@@ -576,6 +578,9 @@ def OrderBase_train(train_iter, valid_iter, model, tokenizer, args):
     optimizer = AdamW(optimizer_grouped_parameters, args.learning_rate, correct_bias=False)
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=len(train_iter) // args.opt_step, num_training_steps=len(train_iter) * args.epoch // args.opt_step)
     mean_loss = 0
+    mean_decoder_loss = 0
+    mean_encoder_loss = 0
+    pices = (args.encoder_loss_p - 0.5) / args.epoch
     for step in range(args.epoch):
         train_iter.sampler.set_epoch(step)
         model.train()
@@ -590,7 +595,9 @@ def OrderBase_train(train_iter, valid_iter, model, tokenizer, args):
             if args.n_gpu > 1:
                 loss = torch.mean(loss)
                 encoder_loss = torch.mean(encoder_loss)
-            loss = loss + args.encoder_loss_p * encoder_loss
+                mean_decoder_loss += loss.cpu().item()
+                mean_encoder_loss += encoder_loss.cpu().item()
+            loss = loss + (args.encoder_loss_p - step*pices) * encoder_loss
             loss.backward()
             mean_loss += loss.cpu().item()
             if idx % args.opt_step == args.opt_step - 1:
@@ -599,8 +606,14 @@ def OrderBase_train(train_iter, valid_iter, model, tokenizer, args):
                 optimizer.zero_grad()
         args.step = step + 1
         mean_loss /= len(train_iter)
+        mean_decoder_loss /= len(train_iter)
+        mean_encoder_loss /= len(train_iter)
+        logging.info("mean_decoder_loss: {:.4f}; mean_encoder_loss: {:.4f}".format(mean_decoder_loss, mean_encoder_loss))
         logging.info("Train loss:{:.4f}".format(mean_loss))
         mean_loss = 0
+        mean_decoder_loss, mean_encoder_loss = 0, 0
+        # if step < 5:
+            # continue
         # if dist.get_rank() == 0:
         with torch.no_grad():
             OrderBase_valid(valid_iter, model, tokenizer, args)

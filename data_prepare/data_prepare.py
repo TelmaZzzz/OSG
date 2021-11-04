@@ -10,6 +10,7 @@ import numpy as np
 import json
 import re
 import rake
+import copy
 logging.getLogger().setLevel(logging.INFO)
 parser = argparse.ArgumentParser()
 parser.add_argument("--dir_path", type=str, default="/Users/zhanglingyuan/Datasets/Gutenberg/txt")
@@ -187,6 +188,49 @@ def prepare_rake_rawdata(args):
             f.write(json.dumps(item, ensure_ascii=False)+"\n")
 
 
+def judge_outline_rerake(outline, rerake):
+    for word in outline:
+        if word.find(rerake) != -1 or rerake.find(word) != -1:
+            return False
+    return True
+
+
+def rerake_fn(item, T=3):
+    result = rake.run(item["story"])
+    re_result = []
+    for res in result:
+        if judge_outline_rerake(item["outline"], res[0]):
+            re_result.append(res[0])
+    p = list(range(len(re_result)))
+    q = list(range(len(item["outline"])))
+    add = []
+    while T != 0:
+        T -= 1
+        random.shuffle(p)
+        random.shuffle(q)
+        new_item = copy.deepcopy(item)
+        new_outline = [item["outline"][i] for i in q[:4]] + [re_result[i] for i in p[:min(len(p),4)]]
+        random.shuffle(new_outline)
+        new_item["outline"] = new_outline
+        add.append(new_item)
+    return add
+
+
+def prepare_rerake_rawdata(args):
+    raw_data = read_data(args.rawdata_path)
+    data = []
+    for item in raw_data:
+        # try:
+        add = rerake_fn(json.loads(item), T=3)
+        data.extend(add)
+        # except:
+            # add = json.loads(item)
+            # data.append(add)
+    with open(args.save_path, "w", encoding="utf-8") as f:
+        for item in data:
+            f.write(json.dumps(item, ensure_ascii=False)+"\n")
+
+
 def prepare_rawdata(args):
     if args.cropus_type == "Brown":
         prepare_Brown_rawdata(args)
@@ -198,6 +242,8 @@ def prepare_rawdata(args):
         prepare_chinese_tonghua_rawdata(args)
     elif args.cropus_type == "rake":
         prepare_rake_rawdata(args)
+    elif args.cropus_type == "rerake":
+        prepare_rerake_rawdata(args)
 
 
 def prepare_minidata(args):
