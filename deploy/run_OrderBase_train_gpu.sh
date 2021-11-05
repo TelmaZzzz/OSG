@@ -26,7 +26,7 @@ python -m torch.distributed.launch --nproc_per_node 2 ../src/OrderBase.py \
 --pretrain_path="$PRETRAIN" \
 --model_save="$HOME/opt/tiger/polish/model/$MODEL" \
 --learning_rate=0.00003 \
---batch_size=3 \
+--batch_size=6 \
 --epoch=50 \
 --opt_step=3 \
 --encoder_loss_p=0.8 \

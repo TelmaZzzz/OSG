@@ -215,7 +215,7 @@ def main(args):
     torch.cuda.set_device(args.local_rank)
     dist.init_process_group(backend='nccl')
     args.device = torch.device("cuda", args.local_rank)
-    keyword = False
+    keyword = True
     # args.device = torch.device("cpu")
     logging.info("Load Data")
     train_data = prepare_examples(args.train_path, True)
@@ -337,6 +337,7 @@ if __name__ == "__main__":
     utils.set_seed(959794+args.local_rank)
     if args.train:
         args.model_save = '/'.join([args.model_save, utils.d2s(datetime.datetime.now(), time=True)])
+        logging.info(f"model save path:{args.model_save}")
         main(args)
     if args.predict:
         args.output = '/'.join([args.output, utils.d2s(datetime.datetime.now(), time=True)])
