@@ -577,12 +577,12 @@ def OrderBase_train(train_iter, valid_iter, model, tokenizer, args):
         },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, args.learning_rate, correct_bias=False)
-    # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=len(train_iter) // args.opt_step, num_training_steps=len(train_iter) * args.epoch // args.opt_step)
-    scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=len(train_iter) // args.opt_step, num_training_steps=len(train_iter) * args.epoch // args.opt_step)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=len(train_iter) // args.opt_step, num_training_steps=len(train_iter) * args.epoch // args.opt_step)
+    # scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=len(train_iter) // args.opt_step, num_training_steps=len(train_iter) * args.epoch // args.opt_step)
     mean_loss = 0
     mean_decoder_loss = 0
     mean_encoder_loss = 0
-    pices = args.encoder_loss_p / args.epoch * 2
+    pices = args.encoder_loss_p / args.epoch * 5
     for step in range(args.epoch):
         train_iter.sampler.set_epoch(step)
         model.train()

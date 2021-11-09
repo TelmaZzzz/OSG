@@ -107,10 +107,10 @@ class BaseDataset(torch.utils.data.Dataset):
             output_mask = [1] * len(output_ids)
             encoder_labels_idx = []
             encoder_labels = []
-            for i in range(len(word_label_idx)):
-                for j in range(i+1, len(word_label_idx)):
-                    encoder_labels_idx.append((word_label_idx[i], word_label_idx[j]))
-                    encoder_labels.append(1 if item.order[i]<item.order[j] else 0)
+            # for i in range(len(word_label_idx)):
+            #     for j in range(i+1, len(word_label_idx)):
+            #         encoder_labels_idx.append((word_label_idx[i], word_label_idx[j]))
+            #         encoder_labels.append(1 if item.order[i]<item.order[j] else 0)
             encoder_labels_mask = [1] * len(encoder_labels)
             self.input_ids.append(input_ids)
             self.input_mask.append(input_mask)
@@ -203,13 +203,14 @@ def prepare_examples(path, is_train=True):
     Examples = []
     for item in data:
         if is_train:
-            Examples.append(Example(story=item["story"], outline=item["outline"], order=item["order"]))
+            Examples.append(Example(story=item["story"], outline=item["outline"]))
         else:
             Examples.append(Example(story=item["story"], outline=item["outline"]))
     return Examples
 
 
 def main(args):
+    logging.info(args.local_rank)
     logging.getLogger().setLevel(logging.INFO if args.local_rank in [-1, 0] else logging.WARN)
     logging.info("Config Init")
     torch.cuda.set_device(args.local_rank)
