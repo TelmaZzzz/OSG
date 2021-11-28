@@ -252,7 +252,7 @@ def get_parameter():
             "repetition_penalty": 1.0,
             "length_penalty": 1.0,
             "no_repeat_ngram_size": 0,
-            "name": "permute_SampleModeMin125Max512topP09K0"
+            "name": "SampleModeMin125Max512topP09K0"
         },
         {
             "max_length": 512,
@@ -266,7 +266,7 @@ def get_parameter():
             "repetition_penalty": 1.0,
             "length_penalty": 1.0,
             "no_repeat_ngram_size": 0,
-            "name": "permute_SampleModeMin125Max512topP09K25"
+            "name": "SampleModeMin125Max512topP09K25"
         },
         {
             "max_length": 512,
@@ -280,7 +280,35 @@ def get_parameter():
             "repetition_penalty": 1.0,
             "length_penalty": 1.0,
             "no_repeat_ngram_size": 0,
-            "name": "permute_SampleModeMin125Max512topP09K50"
+            "name": "SampleModeMin125Max512topP09K50"
+        },
+        {
+            "max_length": 512,
+            "min_length": 125,
+            "do_sample": True,
+            "early_stopping": False,
+            "num_beams": 1,
+            "temperature": 0.7,
+            "top_k": 0,
+            "top_p": 0.9,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "name": "SampleModeMin125Max512topP09K0T07"
+        },
+        {
+            "max_length": 512,
+            "min_length": 125,
+            "do_sample": True,
+            "early_stopping": False,
+            "num_beams": 1,
+            "temperature": 0.7,
+            "top_k": 50,
+            "top_p": 1.0,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "name": "SampleModeMin125Max512topP1K50T07"
         },
         {
             "max_length": 512,
@@ -289,12 +317,82 @@ def get_parameter():
             "early_stopping": False,
             "num_beams": 1,
             "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1.0,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "name": "SampleModeMin125Max512topP1K50T1"
+        },
+        {
+            "max_length": 512,
+            "min_length": 125,
+            "do_sample": True,
+            "early_stopping": False,
+            "num_beams": 5,
+            "temperature": 1.0,
             "top_k": 0,
             "top_p": 0.9,
             "repetition_penalty": 1.0,
             "length_penalty": 1.0,
             "no_repeat_ngram_size": 0,
-            "name": "permute_SampleModeMin125Max512topP09K00"
+            "name": "BeamSampleModeMin125Max512topP09K0T1Beam5"
+        },
+        {
+            "max_length": 512,
+            "min_length": 125,
+            "do_sample": True,
+            "early_stopping": False,
+            "num_beams": 5,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 0.9,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "name": "BeamSampleModeMin125Max512topP09K50T1Beam5"
+        },
+        {
+            "max_length": 512,
+            "min_length": 125,
+            "do_sample": True,
+            "early_stopping": False,
+            "num_beams": 5,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1.0,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "name": "BeamSampleModeMin125Max512topP1K50T1Beam5"
+        },
+        {
+            "max_length": 512,
+            "min_length": 150,
+            "do_sample": False,
+            "early_stopping": False,
+            "num_beams": 1,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "name": "Greedy150ModeBaseParameter"
+        },
+        {
+            "max_length": 512,
+            "min_length": 136,
+            "do_sample": False,
+            "early_stopping": False,
+            "num_beams": 1,
+            "temperature": 1.0,
+            "top_k": 50,
+            "top_p": 1,
+            "repetition_penalty": 1.0,
+            "length_penalty": 1.0,
+            "no_repeat_ngram_size": 0,
+            "name": "Greedy136ModeBaseParameter"
         },
     ]
     return parameter_list

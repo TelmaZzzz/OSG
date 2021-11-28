@@ -216,6 +216,7 @@ def main(args):
     torch.cuda.set_device(args.local_rank)
     dist.init_process_group(backend='nccl')
     args.device = torch.device("cuda", args.local_rank)
+    # args.device = torch.device("cpu")
     keyword = True
     # args.device = torch.device("cpu")
     logging.info("Load Data")
@@ -262,7 +263,7 @@ def main(args):
     args.pad_id = tokenizer.pad_token_id
     logging.info("Prepare Dataset")
     train_dataset = BaseDataset(train_data, tokenizer, True)
-    valid_dataset = BaseDataset(valid_data, tokenizer, False)
+    valid_dataset = BaseDataset(valid_data, tokenizer, True)
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
     valid_sampler = utils.SequentialDistributedSampler(valid_dataset, args.batch_size)
     args.valid_len = len(valid_dataset)
@@ -270,9 +271,22 @@ def main(args):
     # test_dataset = BaseDataset(test_data, tokenizer)
     train_iter = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, sampler=train_sampler, collate_fn=Collection(args))
     # train_iter = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=Collection(args))
-    valid_iter = torch.utils.data.DataLoader(valid_dataset, batch_size=args.batch_size, sampler=valid_sampler,collate_fn=Collection(args))
+    valid_iter = torch.utils.data.DataLoader(valid_dataset, batch_size=args.batch_size, sampler=valid_sampler, collate_fn=Collection(args))
+    # valid_iter = torch.utils.data.DataLoader(valid_dataset, batch_size=args.batch_size, collate_fn=Collection(args))
     # test_iter = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, collate_fn=Collection(args))
     logging.info("Start Training")
+    if args.distillation:
+        teacher_model = BartForConditionalGeneration.from_pretrained(args.pretrain_path)
+        teacher_model.config.device = args.device
+        teacher_model.resize_token_embeddings(len(tokenizer))
+        if args.teacher_model:
+            teacher_model.load_state_dict(torch.load(args.teacher_model, map_location=torch.device('cpu')))
+        teacher_model = teacher_model.to(args.device)
+        for n, v in teacher_model.named_parameters():
+            v.requared_grad = False
+        args.online_teacher_loss_p = 0
+        teacher_model.eval()
+        model = {"teacher": teacher_model, "student": model}
     if keyword:
         Base_train(train_iter, valid_iter, model, tokenizer, args)
     else:
@@ -322,7 +336,7 @@ def predict(args):
     test_iter = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, sampler=test_sampler, collate_fn=Collection(args))
     logging.info("Start predict")
     parameter_list = utils.get_parameter()
-    predict_list = [0]
+    predict_list = [3]
     args.output += f"_batch{args.batch_size}"
     with torch.no_grad():
         for idx, parameter in enumerate(parameter_list):

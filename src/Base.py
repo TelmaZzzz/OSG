@@ -257,7 +257,7 @@ def predict(args):
 
 if __name__ == "__main__":
     args = Base_config()
-    utils.set_seed(959794+args.local_rank)
+    utils.set_seed(42+args.local_rank)
     if args.train:
         args.model_save = '/'.join([args.model_save, utils.d2s(datetime.datetime.now(), time=True)])
         main(args)

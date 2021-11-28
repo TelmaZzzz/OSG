@@ -143,6 +143,10 @@ def OrderBase_config():
     parser.add_argument("--pretrain_path", type=str)
     parser.add_argument("--opt_step", type=int, default=1)
     parser.add_argument("--encoder_loss_p", type=float, default=1.0)
+    parser.add_argument("--distillation", action="store_true")
+    parser.add_argument("--teacher_model", type=str, default=None)
+    parser.add_argument("--teacher_loss_p", type=float, default=0.5)
+    parser.add_argument("--temperature", type=float, default=1.0)
     # Predict config
     parser.add_argument("--predict", action="store_true")
     parser.add_argument("--output", type=str)

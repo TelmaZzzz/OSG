@@ -231,6 +231,30 @@ def prepare_rerake_rawdata(args):
             f.write(json.dumps(item, ensure_ascii=False)+"\n")
 
 
+def permute_fn(item, T):
+    outline = item["outline"]
+    idx_list = list(range(len(outline)))
+    add = []
+    while T != 0:
+        T -= 1
+        new_item = copy.deepcopy(item)
+        new_item["outline"] = [outline[idx] for idx in idx_list]
+        add.append(new_item)
+        random.shuffle(idx_list)
+    return add
+
+
+def prepare_permute_rawdata(args):
+    raw_data = read_data(args.rawdata_path)
+    data = []
+    for item in raw_data:
+        add = permute_fn(json.loads(item), T=6)
+        data.extend(add)
+    with open(args.save_path, "w", encoding="utf-8") as f:
+        for item in data:
+            f.write(json.dumps(item, ensure_ascii=False)+"\n")
+
+
 def prepare_rawdata(args):
     if args.cropus_type == "Brown":
         prepare_Brown_rawdata(args)
@@ -244,6 +268,8 @@ def prepare_rawdata(args):
         prepare_rake_rawdata(args)
     elif args.cropus_type == "rerake":
         prepare_rerake_rawdata(args)
+    elif args.cropus_type == "permute":
+        prepare_permute_rawdata(args)
 
 
 def prepare_minidata(args):

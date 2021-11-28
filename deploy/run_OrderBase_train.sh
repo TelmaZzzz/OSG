@@ -16,7 +16,7 @@ PRETRAIN="fnlp/bart-large-chinese"
 TRAIN_PATH="$HOME/Datasets/LOT_datasets_and_models/data/datasets/LOTdatasets/permute/train_permute_5.jsonl"
 
 # python ../src/OrderBase.py \
-python -m torch.distributed.launch --nproc_per_node 1 ../src/OrderBase.py \
+python -m torch.distributed.launch --nproc_per_node 2 ../src/OrderBase.py \
 --train \
 --train_path="$TRAIN_PATH" \
 --valid_path="$HOME/Datasets/LOT/data/val.jsonl" \
@@ -24,7 +24,9 @@ python -m torch.distributed.launch --nproc_per_node 1 ../src/OrderBase.py \
 --pretrain_path="$PRETRAIN" \
 --model_save="$HOME/opt/tiger/polish/model/$MODEL" \
 --learning_rate=0.00003 \
---batch_size=1 \
+--batch_size=2 \
 --epoch=30 \
 --opt_step=2 \
+--distillation \
+--teacher_loss_p=0.5 \
 > ../log/OrderBase.log 2>&1 &

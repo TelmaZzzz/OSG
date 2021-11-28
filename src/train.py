@@ -17,7 +17,7 @@ def save(model, path, step):
     #     os.remove(path)
     #     logging.info("model remove success!!!")
     logging.info("Save model")
-    torch.save(model.module, path)
+    torch.save(model.module.state_dict(), path)
 
 
 def draw(f, mp):
@@ -28,6 +28,14 @@ def draw(f, mp):
     # f.write("predict:\n")
     # f.write(predict +"\n")
     # f.write("-----------------------------------------------\n")
+
+
+def distillation_loss_function(teacher_logits, student_logits):
+    Loss_fn = nn.KLDivLoss(reduction="none")
+    # Loss_fn = nn.CrossEntropyLoss(reduction="none")
+    loss = Loss_fn(student_logits.log(), teacher_logits)
+    loss = torch.sum(loss, dim=-1)
+    return loss
 
 
 def ComGen_valid(valid_iter, model, tokenizer, args):
@@ -214,11 +222,18 @@ def Base_predict(test_iter, model, tokenizer, args):
     if dist.get_rank() != 0:
         dist.barrier()
     else:
+        name = parameter["name"]
+        test = True
+        if test:
+            with open(args.output + f"_{name}.txt", "w", encoding="utf-8") as f:
+                for i in range(len(predicts)):
+                    draw(f, {"story": predicts[i], "outline": args.outline[i]})
+            dist.barrier()
+            return
         logging.info("Metrics Compare")
         res = metrics.base_compare(args.gold, predicts, args.outline)
         overall = metrics.overall_compare(res)
         res["overall"] = overall
-        name = parameter["name"]
         logging.info(f"generate parameter name: {name}")
         for k, v in res.items():
             logging.info("{}: {:.4f}".format(k, v))
@@ -273,12 +288,12 @@ def Base_valid(valid_iter, model, tokenizer, args):
     else:
         predictions = torch.cat(predict_logits, dim=0)
     predicts = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False).replace(" ","").replace("[unused1]", "") for g in predictions]
+    logging.info("Metrics Compare")
+    res = metrics.base_compare(args.gold, predicts, args.outline)
+    overall = metrics.overall_compare(res)
     if dist.get_rank() != 0:
         dist.barrier()
     else:
-        logging.info("Metrics Compare")
-        res = metrics.base_compare(args.gold, predicts, args.outline)
-        overall = metrics.overall_compare(res)
         res["overall"] = overall
         for k, v in res.items():
             logging.info("{}: {:.4f}".format(k, v))
@@ -302,9 +317,43 @@ def Base_valid(valid_iter, model, tokenizer, args):
                 # f.write("-----------------------------------------------\n")
             draw(f, res)
         dist.barrier()
+    return overall
+
+
+def Base_loss(valid_iter, student_model, teacher_model, args):
+    student_loss_list = []
+    teacher_loss_list = []
+    student_model.eval()
+    teacher_model.eval()
+    for item in valid_iter:
+        input_ids = item["input_ids"].to(args.device)
+        attention_mask = item["input_mask"].to(args.device)
+        labels = item["output_ids"].to(args.device)
+        student_loss = student_model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss.view(1)
+        teacher_loss = teacher_model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss.view(1)
+        student_loss_list.append(torch.cat([student_loss] * input_ids.size(0), dim=0))
+        teacher_loss_list.append(torch.cat([teacher_loss] * input_ids.size(0), dim=0))
+    teacher_model_loss = utils.distributed_concat(torch.cat(teacher_loss_list, dim=0), args.valid_len)
+    dist.barrier()
+    student_model_loss = utils.distributed_concat(torch.cat(student_loss_list, dim=0), args.valid_len)
+    dist.barrier()
+    teacher_model_loss = torch.mean(teacher_model_loss, dim=0)
+    student_model_loss = torch.mean(student_model_loss, dim=0)
+    logging.info(f"teacher_model_loss:{teacher_model_loss}. student_model_loss:{student_model_loss}")
+    if teacher_model_loss < student_model_loss:
+        if args.online_teacher_loss_p == 0:
+            args.online_teacher_loss_p = args.teacher_loss_p
+    else:
+        args.online_teacher_loss_p = 0
+        teacher_model.load_state_dict(student_model.module.state_dict())
+        for n ,v in teacher_model.named_parameters():
+            v.requared_grad = False
 
 
 def Base_train(train_iter, valid_iter, model, tokenizer, args):
+    if args.distillation:
+        teacher_model = model["teacher"]
+        model = model["student"]
     no_decay = ["bias", "LayerNorm.weight"]
     high_lr = ["lm_head"]
     optimizer_grouped_parameters = [
@@ -339,15 +388,30 @@ def Base_train(train_iter, valid_iter, model, tokenizer, args):
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=len(train_iter) // args.opt_step, num_training_steps=len(train_iter) * args.epoch // args.opt_step)
     # scheduler = get_cosine_with_hard_restarts_schedule_with_warmup(optimizer, num_warmup_steps=len(train_iter) // args.opt_step, num_training_steps=len(train_iter) * args.epoch // args.opt_step)
     mean_loss = 0
+    teacher_score = 0
     for step in range(args.epoch):
         if args.local_rank != -1:
             train_iter.sampler.set_epoch(step)
         model.train()
         logging.info("Starting Training epoch:{}".format(step+1))
         for idx, item in enumerate(train_iter):
-            loss = model(input_ids=item["input_ids"].to(args.device), attention_mask=item["input_mask"].to(args.device), labels=item["output_ids"].to(args.device)).loss
-            if args.n_gpu > 1:
-                loss = torch.mean(loss)
+            input_ids = item["input_ids"].to(args.device)
+            attention_mask = item["input_mask"].to(args.device)
+            labels = item["output_ids"].to(args.device)
+            output = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+            loss = output.loss
+            if args.distillation:
+                with torch.no_grad():
+                    teacher_output = teacher_model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                    labels_mask = (labels != -100)
+                    teacher_logits = F.softmax(teacher_output.logits / args.temperature, dim=-1)
+                student_logits = F.softmax(output.logits, dim=-1)
+                soft_loss = distillation_loss_function(teacher_logits, student_logits)
+                utils.debug("soft_loss shape", soft_loss.shape)
+                utils.debug("labels_mask shape", labels_mask.shape)
+                soft_loss = torch.mul(soft_loss, labels_mask).mean()
+                utils.debug("soft_loss", soft_loss)
+                loss = args.online_teacher_loss_p * soft_loss + (1 - args.online_teacher_loss_p) * loss
             loss.backward()
             mean_loss += loss.cpu().item()
             if idx % args.opt_step == args.opt_step - 1:
@@ -362,7 +426,17 @@ def Base_train(train_iter, valid_iter, model, tokenizer, args):
         if step < 5:
             continue
         with torch.no_grad():
-            Base_valid(valid_iter, model, tokenizer, args)
+            student_score = Base_valid(valid_iter, model, tokenizer, args)
+            # Base_loss(valid_iter, model, teacher_model, args)
+            if student_score > teacher_score:
+                teacher_score = student_score
+                teacher_model.load_state_dict(model.module.state_dict())
+                for n ,v in teacher_model.named_parameters():
+                    v.requared_grad = False
+                args.online_teacher_loss_p = 0
+            else:
+                args.online_teacher_loss_p = args.teacher_loss_p
+            logging.info(f"online_teacher_loss_p:{args.online_teacher_loss_p}")
 
 
 def Rewrite_valid(valid_iter, model, tokenizer, args):
